@@ -1,0 +1,31 @@
+name: Full Software Lifecycle
+on: [push]
+
+jobs:
+  devops-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # SECURITY: Scan for vulnerabilities
+      - name: Dependency Check
+        uses: snyk/actions/maven@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      # AUTH: Connect to GCP
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      # DEPLOY: Build and Push to Google Cloud Run
+      - name: Build and Deploy
+        run: |
+          gcloud builds submit --tag gcr.io/kishorsurya2011-org/expense-tracker:${{ github.sha }} .
+          gcloud run deploy expense-tracker \
+            --image gcr.io/kishorsurya2011-org/expense-tracker:${{ github.sha }} \
+            --platform managed \
+            --region us-central1 \
+            --allow-unauthenticated \
+            --set-env-vars "SPRING_PROFILES_ACTIVE=prod"
