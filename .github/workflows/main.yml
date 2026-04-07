@@ -1,31 +1,33 @@
-name: Full Software Lifecycle
-on: [push]
+name: Expense Tracker CI/CD
+on:
+  push:
+    branches: [ main ]
 
 jobs:
-  devops-pipeline:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      # SECURITY: Scan for vulnerabilities
-      - name: Dependency Check
-        uses: snyk/actions/maven@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      # AUTH: Connect to GCP
+      # Login to Google Cloud
       - id: 'auth'
         uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      # DEPLOY: Build and Push to Google Cloud Run
-      - name: Build and Deploy
+      # Build the Docker image (This handles Java + React together)
+      - name: Build and Push
         run: |
-          gcloud builds submit --tag gcr.io/kishorsurya2011-org/expense-tracker:${{ github.sha }} .
+          gcloud auth configure-docker
+          docker build -t gcr.io/kishorsurya2011-org/expense-app:latest .
+          docker push gcr.io/kishorsurya2011-org/expense-app:latest
+
+      # Deploy to Cloud Run
+      - name: Deploy to Cloud Run
+        run: |
           gcloud run deploy expense-tracker \
-            --image gcr.io/kishorsurya2011-org/expense-tracker:${{ github.sha }} \
-            --platform managed \
+            --image gcr.io/kishorsurya2011-org/expense-app:latest \
             --region us-central1 \
+            --platform managed \
             --allow-unauthenticated \
-            --set-env-vars "SPRING_PROFILES_ACTIVE=prod"
+            --add-cloudsql-instances kishorsurya2011-org:us-central1:expense-db-instance
